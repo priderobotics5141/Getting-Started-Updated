@@ -1,6 +1,7 @@
 package org.usfirst.frc.team5141.robot; // What is package and why is it making the code wonky?
 
 import edu.wpi.first.wpilibj.IterativeRobot;
+import edu.wpi.first.wpilibj.CameraServer;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.GenericHID;
@@ -8,12 +9,16 @@ import edu.wpi.first.wpilibj.GenericHID.RumbleType;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.SpeedControllerGroup;
 import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.SerialPort;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.VictorSP;
+import edu.wpi.first.wpilibj.Spark;
+import com.kauailabs.navx.frc.AHRS;
+import com.kauailabs.navx.frc.AHRS.SerialDataType;
 
 
 /**
@@ -32,20 +37,25 @@ public class Robot extends IterativeRobot {
 	
 	DriverStation ds = DriverStation.getInstance();
 	
+	
+	AHRS ahrs;
+	
 	Joystick gamePad0 = new Joystick (0);
+	double leftStickY = gamePad0.getRawAxis(1);
+    double rightStickY = gamePad0.getRawAxis(5);
 	
 	VictorSP leftOne = new VictorSP(0);
 	VictorSP leftTwo = new VictorSP(1);
 	VictorSP leftThree = new VictorSP(2);
 	SpeedControllerGroup leftDrive = new SpeedControllerGroup(leftOne, leftTwo, leftThree);
-	
 	VictorSP rightOne = new VictorSP(3);
 	VictorSP rightTwo = new VictorSP(4);
 	VictorSP rightThree = new VictorSP(5);
 	SpeedControllerGroup rightDrive = new SpeedControllerGroup(rightOne, rightTwo, rightThree);
 	
 	VictorSP elevator = new VictorSP(8);
-	SpeedControllerGroup elevatorDrive = new SpeedControllerGroup(elevator);
+	
+	Spark testLight = new Spark(9);
 	
 	DifferentialDrive driveTrain = new DifferentialDrive(leftDrive, rightDrive);
 	
@@ -58,24 +68,35 @@ public class Robot extends IterativeRobot {
 	int toggCount = 0;
 	int toggCount1 = 0;
 	int toggCount2 = 0;
+	int toggCount3 = 0;
+	int elevatorState=0;
+	int elevatorDestiny = 0;
 	double drive;
+	double red = .61 ;
+	double blue = .87;
+	double gold = .67;
 	
-	DigitalInput limitSwitch = new DigitalInput(0);
-	DigitalInput magSwitch = new DigitalInput(1);
 	
-//	Counter counter = new Counter(limitSwitch);
+	DigitalInput limitSwitch0 = new DigitalInput(0);
+	DigitalInput limitSwitch1 = new DigitalInput(1);
+	DigitalInput limitSwitch2 = new DigitalInput(2);
+	DigitalInput limitSwitch3 = new DigitalInput(3);
+	DigitalInput magSwitch = new DigitalInput(4);
+	Timer timer = new Timer();
 	
-	/**public void tankDriveAll(double l,double r) {
-		driveOne.tankDrive(l,r);
-		driveTwo.tankDrive(l,r);
-		driveThree.tankDrive(l,r);
-	}
-	*/
+	//Game Dependent Variables
+	char startPosition = 'L';
+	char switchPosition;
+	char scalePosition;
+	String destination = "Sw"; 
+	// Sw = Switch & Sc = Scale
+	
 	
 	/*public void setRumble(RumbleType rumble) {
 		this.rumble = rumble;
-		
 	}
+	
+	
 	
 	/**private RumbleType RumbleType(int i) {
 	// TODO Auto-generated method stub
@@ -86,7 +107,6 @@ public class Robot extends IterativeRobot {
 		return null;
 	}
 		
-	
 	
 	public boolean solenoidAll(boolean aBoolean) {
 		s0.set(aBoolean);
@@ -104,33 +124,113 @@ public class Robot extends IterativeRobot {
     	m_chooser.addDefault("Default Auto", kDefaultAuto);
 		m_chooser.addObject("My Auto", kCustomAuto);
 		SmartDashboard.putData("Auto choices", m_chooser);
-    	
+    	leftDrive.setInverted(true);
+    	rightDrive.setInverted(true);
+    	CameraServer.getInstance().startAutomaticCapture();
+    	ahrs = new AHRS(SerialPort.Port.kMXP, SerialDataType.kProcessedData, (byte)50);
     }
     
-    public boolean isSwitchSet() {
-    	return limitSwitch.get();
-    }
+   
     
     /**
      * This function is run once each time the robot enters autonomous mode
      */
     public void autonomousInit() {
-    	//String gameData;
-    	//gameData = DriverStation.getInstance().getGameSpecificMessage();
-    	//if(gameData.charAt(0) == 'L')
-    	//{
-    		//Put left auto code
-    	//} else {
-    		//Put right auto code
-    	//}
-    	
+    	timer.reset();
+    	timer.start();
+    	String gameData = DriverStation.getInstance().getGameSpecificMessage();
+    	switchPosition = gameData.charAt(0);
+    	scalePosition = gameData.charAt(1);
+    	c.setClosedLoopControl(false);
     }
 
     /**
      * This function is called periodically during autonomous
      */
     public void autonomousPeriodic() {
-    
+        SmartDashboard.putNumber("QuaternionZ", ahrs.getQuaternionZ());
+        ahrs.enableLogging(true);
+
+    	switch(startPosition) {
+    	case 'L': if(destination == "Sw") {
+			if(switchPosition == 'L') {
+				if(!(ahrs.getQuaternionZ() > 0 && ahrs.getQuaternionZ() < .1)) {
+					driveTrain.tankDrive(-.4,.4);
+				}
+				else 
+				{
+					driveTrain.tankDrive(0, 0);
+				}
+			/*	if(timer.get() > 1 && timer.get() < 2) {
+					driveTrain.tankDrive(.5,-.5);
+				}
+				if(timer.get() > 2 && timer.get() < 3) {
+					driveTrain.tankDrive(.5, .5);
+				}
+				if(timer.get() > 3 && timer.get() < 4) {
+					driveTrain.tankDrive(0,0);
+					elevator.set(.5);// CHANGE TO THE LOADER DRIVE
+				}
+				if(timer.get() > 4 && timer.get() < 5) {
+					elevator.set(0);
+				}
+			*/	//LSwL
+			}
+			else {
+				
+				//LSwR
+			}
+			break;
+		}
+		if(destination == "Sc")	{
+			if(scalePosition == 'L') {
+				//LScL
+			}
+			else {
+				//LScR
+			}
+			break;
+		}
+    	case 'C': if(destination == "Sw") {
+			if(switchPosition == 'L') {
+				//CSwL
+			}
+			else {
+				//CSwR
+			}
+			break;
+		}
+		if(destination == "Sc")	{
+			if(scalePosition == 'L') {
+				//CScL
+			}
+			else {
+				//CScR
+			}
+			break;
+		}
+    	case 'R':if(destination == "Sw") {
+			if(switchPosition == 'L') {
+				//RSwL
+			}
+			else {
+				//RSwR
+			}
+			break;
+		}
+		if(destination == "Sc")	{
+			if(scalePosition == 'L') {
+				//RScL
+			}
+			else {
+				//RScR
+			}
+			break;
+		}
+    	}
+    		
+    		
+    	
     }
     
     
@@ -148,66 +248,113 @@ public class Robot extends IterativeRobot {
     
     // Two controllers can't input to the same things at the same time, gamepad 0 has priority
     	public void teleopPeriodic() {
-    		double leftStick = (gamePad0.getRawAxis(1) *.5)*(gamePad0.getRawAxis(3)+1);
-    		double rightStick = (gamePad0.getRawAxis(5) *.5)*(gamePad0.getRawAxis(3)+1);
+    		double leftStick = (-gamePad0.getRawAxis(1) *.5)*(gamePad0.getRawAxis(3)+1);
+    		double rightStick = (-gamePad0.getRawAxis(5) *.5)*(gamePad0.getRawAxis(3)+1);
+    		driveTrain.tankDrive(leftStick, rightStick);
     	
-    		driveTrain.tankDrive(leftStick, rightStick);{
-    			
+    		if(gamePad0.getPOV()==0) {
+    			elevator.set(.5);
     		}
-    	
+    		if(gamePad0.getPOV()==180) {
+    			elevator.set(-.5);
+    		}
+    		if(gamePad0.getPOV()==-1) {
+    			elevator.set(0);
+    			driveTrain.tankDrive(0, 0);
+    		}
+    		if(gamePad0.getPOV()==90) {
+    			driveTrain.tankDrive(.7, -.7);
+    		}
+    		if(gamePad0.getPOV()==270) {
+    			driveTrain.tankDrive(-.7, .7);
+    		}
+    		
     	  
-    	if(gamePad0.getRawButton(1) == true && toggCount2 == 0) {
+    	if(gamePad0.getRawButton(5) == true && toggCount2 == 0) {
     		  c.setClosedLoopControl(!c.getClosedLoopControl());
     		  toggCount2++;
     	}
-    	else {
-    		  if(gamePad0.getRawButton(1) == false && toggCount2 == 1) {
-    			  toggCount2 = 0;
-    		  }
-    			  else {
-    		  }
+    	if(gamePad0.getRawButton(5) == false && toggCount2 == 1) {
+    		  toggCount2 = 0;
     	}
     	  
-    	if(gamePad0.getRawButton(2) == true && toggCount == 0) {
+    	if(gamePad0.getRawButton(6) == true && toggCount == 0) {
     			s0.set(!s0.get());//S0 doesn't work without S2 going at the same time?
     			s1.set(!s1.get());// Gear pneumatics
     			s2.set(!s2.get());//
     			toggCount++;
     		}
-    		else {
-    			if(gamePad0.getRawButton(2) == false && toggCount == 1) {
+    	if(gamePad0.getRawButton(6) == false && toggCount == 1) {
     				toggCount = 0;
     			}
-    			else {	
-    			}
-    		}
-			
-    	if(gamePad0.getRawButton(3) == true && toggCount1 == 0) {
-    		elevatorDrive.set(.5);
-			toggCount1++;
-		}
-		else {
-			if(gamePad0.getRawButton(3) == false && toggCount1 == 1) {
-				toggCount1 = 2;
-			}
-			else {
-				if(magSwitch.get() == true && toggCount1 == 2) {
-					elevatorDrive.set(0);
-					toggCount1 = 3;
-				}
-				else {
-					if(gamePad0.getRawButton(3) == true && toggCount1 == 3) {
-						toggCount1 = 0;
-					}
-					else {
-						
-					}
-				}
-			}
-		}
+    			
+    	//BELOW ARE ELEVATOR CONTROLS	
+    	//limit switches
+    	
+    	/** TOGGLE BASE CODE
+    	 * if(button.get() == true && toggCount == 0)
+    	 *   something
+    	 *   toggCount++
+    	 * if(button.get() == false && toggCount == 1)
+    	 *   something
+    	 *   toggCount++
+    	 * etc...
+    	 * 
+    	 */
+    	
+    	//elevator code 
+    	
+    	elevatorState = limitSwitch0.get()? elevatorState:0;
+    	elevatorState = limitSwitch1.get()? elevatorState:2;
+    	elevatorState = limitSwitch2.get()? elevatorState:4;
+    	elevatorState = limitSwitch3.get()? elevatorState:6;
+    	
+    	
+    	if((elevator.get() > 0 && elevatorState == 4)||(elevator.get() < 0 && elevatorState == 6)) {
+    		elevatorState = 5;
+    	}
+    	//if((elevator.get() > 0 && elevatorState == 2)||(elevator.get() < 0 && elevatorState == 4)) {
+    	//	elevatorState = 3;
+    	//}
+    	if((elevator.get() > 0 && elevatorState == 0)||(elevator.get() < 0 && elevatorState == 2)) {
+    		elevatorState = 1;
+    	}
+    	
+    	
+    	
+    	if(gamePad0.getRawButtonPressed(1) == true) {
+    		elevatorDestiny = 0;
+    	}
+    	if(gamePad0.getRawButtonPressed(2) == true) {
+    		elevatorDestiny = 2;
+    	}
+    	if(gamePad0.getRawButtonPressed(3) == true) {
+    		elevatorDestiny = 4;
+    	}
+    	if(gamePad0.getRawButtonPressed(4) == true) {
+    		elevatorDestiny = 6; 
+    	}
+    	/*
+    	if(elevatorDestiny > elevatorState) {
+    		elevator.set(.5);
+    	}
+    	if(elevatorDestiny < elevatorState) {
+    		elevator.set(-.5);
+    	}
+    	if(elevatorDestiny == elevatorState) {
+    		elevator.set(0);
+    	}
+    	*/
+    	}
+    	
+    	
+    	  public static void main (String[] args) {
+              Robot.main(args);
+          }
 
-		}
-	}
+		
+}
+
     		
     /**
      * This function is called periodically during test mode
