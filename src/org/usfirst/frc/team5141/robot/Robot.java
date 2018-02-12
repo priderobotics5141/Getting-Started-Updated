@@ -1,4 +1,4 @@
-package org.usfirst.frc.team5141.robot; // What is package and why is it making the code wonky?
+package org.usfirst.frc.team5141.robot; 
 
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.CameraServer;
@@ -19,7 +19,6 @@ import edu.wpi.first.wpilibj.VictorSP;
 import edu.wpi.first.wpilibj.Spark;
 import com.kauailabs.navx.frc.AHRS;
 import com.kauailabs.navx.frc.AHRS.SerialDataType;
-
 
 /**
  * The VM is configured to automatically run this class, and to call the
@@ -65,16 +64,21 @@ public class Robot extends IterativeRobot {
 	Solenoid s2 = new Solenoid(2);
 	
 	int autoLoopCounter;
-	int toggCount = 0;
-	int toggCount1 = 0;
-	int toggCount2 = 0;
-	int toggCount3 = 0;
-	int elevatorState=0;
-	int elevatorDestiny = 0;
+	int toggCount;
+	int toggCount1;
+	int toggCount2;
+	int toggCount3;
+	int elevatorState;
+	int elevatorDestiny;
+	int autoStep;
 	double drive;
 	double red = .61 ;
 	double blue = .87;
 	double gold = .67;
+	final double ANGLE1=(130+160)/2;
+	final double ERROR=(160-130)/2;
+	boolean maybe=false;
+	
 	
 	
 	DigitalInput limitSwitch0 = new DigitalInput(0);
@@ -102,7 +106,8 @@ public class Robot extends IterativeRobot {
 	// TODO Auto-generated method stub
 	return null;
 }*/
-
+	
+	
 	GenericHID.RumbleType rumble(double Output) {
 		return null;
 	}
@@ -128,6 +133,7 @@ public class Robot extends IterativeRobot {
     	rightDrive.setInverted(true);
     	CameraServer.getInstance().startAutomaticCapture();
     	ahrs = new AHRS(SerialPort.Port.kMXP, SerialDataType.kProcessedData, (byte)50);
+    	testLight.set(0.13);
     }
     
    
@@ -136,32 +142,57 @@ public class Robot extends IterativeRobot {
      * This function is run once each time the robot enters autonomous mode
      */
     public void autonomousInit() {
+    	autoStep = 0;
     	timer.reset();
     	timer.start();
     	String gameData = DriverStation.getInstance().getGameSpecificMessage();
     	switchPosition = gameData.charAt(0);
     	scalePosition = gameData.charAt(1);
     	c.setClosedLoopControl(false);
+    	testLight.set(0.13);
+    	ahrs.reset();
+    	ahrs.resetDisplacement();
     }
 
+  
     /**
      * This function is called periodically during autonomous
      */
+    
     public void autonomousPeriodic() {
-        SmartDashboard.putNumber("QuaternionZ", ahrs.getQuaternionZ());
+        SmartDashboard.putNumber("Yaw", ahrs.getYaw());
+        SmartDashboard.putNumber("DisplacementX", ahrs.getDisplacementX());
+        SmartDashboard.putNumber("DisplacementY", ahrs.getDisplacementY());
+		SmartDashboard.putNumber("DisplacementZ", ahrs.getDisplacementZ());
         ahrs.enableLogging(true);
-
+        if(autoStep == 0 && timer.get() >= 2) {
+        	autoStep = 3;
+        }
     	switch(startPosition) {
     	case 'L': if(destination == "Sw") {
 			if(switchPosition == 'L') {
-				if(!(ahrs.getQuaternionZ() > 0 && ahrs.getQuaternionZ() < .1)) {
-					driveTrain.tankDrive(-.4,.4);
+				double percentError= (ahrs.getYaw()-ANGLE1)/360;
+				SmartDashboard.putNumber("Maybe", (!(Math.abs(ahrs.getYaw()-ANGLE1)<ERROR))?1:0);
+				SmartDashboard.putNumber("percentError", percentError*360);
+				double yaw=ahrs.getYaw();
+				boolean maybe=(Math.abs(yaw-ANGLE1)>ERROR);
+				if(autoStep == 3 &&(Math.abs(yaw-ANGLE1)>ERROR)) { 
+					driveTrain.tankDrive(.37+.23*(percentError),-.37-.23*(percentError));
 				}
-				else 
-				{
-					driveTrain.tankDrive(0, 0);
-				}
-			/*	if(timer.get() > 1 && timer.get() < 2) {
+				else { driveTrain.tankDrive(0,0); }
+				//autoStep = 2;
+				if(autoStep == 1 && ahrs.getDisplacementX() <= .1) { driveTrain.tankDrive(.4,.44); }
+				if(autoStep == 1 && ahrs.getDisplacementX() >= .1) { driveTrain.tankDrive(.4,-.4); autoStep = 4; }
+				
+			
+			//	if(ahrs.getYaw() > 60) {
+			//		driveTrain.tankDrive(0, 0);
+			//	}
+			//	else 
+			//	{
+			//		driveTrain.tankDrive(0, 0);
+			//	}
+				/*if(timer.get() > 1 && timer.get() < 2) {
 					driveTrain.tankDrive(.5,-.5);
 				}
 				if(timer.get() > 2 && timer.get() < 3) {
@@ -173,17 +204,17 @@ public class Robot extends IterativeRobot {
 				}
 				if(timer.get() > 4 && timer.get() < 5) {
 					elevator.set(0);
-				}
-			*/	//LSwL
+				}*/
+				//LSwL
 			}
 			else {
-				
 				//LSwR
 			}
 			break;
 		}
 		if(destination == "Sc")	{
 			if(scalePosition == 'L') {
+				
 				//LScL
 			}
 			else {
@@ -240,6 +271,9 @@ public class Robot extends IterativeRobot {
     public void teleopInit(){
     	c.setClosedLoopControl(false);
     	s0.set(true);
+    	timer.reset();
+    	timer.start();
+    	ahrs.resetDisplacement();
     }
 
     /**
@@ -248,6 +282,10 @@ public class Robot extends IterativeRobot {
     
     // Two controllers can't input to the same things at the same time, gamepad 0 has priority
     	public void teleopPeriodic() {
+    		SmartDashboard.putNumber("DisplacementX", ahrs.getDisplacementX());
+    		SmartDashboard.putNumber("DisplacementY", ahrs.getDisplacementY());
+    		SmartDashboard.putNumber("DisplacementZ", ahrs.getDisplacementZ());
+    		if(timer.get()>=105) {testLight.set(.15);}
     		double leftStick = (-gamePad0.getRawAxis(1) *.5)*(gamePad0.getRawAxis(3)+1);
     		double rightStick = (-gamePad0.getRawAxis(5) *.5)*(gamePad0.getRawAxis(3)+1);
     		driveTrain.tankDrive(leftStick, rightStick);
@@ -260,9 +298,14 @@ public class Robot extends IterativeRobot {
     		}
     		if(gamePad0.getPOV()==-1) {
     			elevator.set(0);
+    		}
+    		if(gamePad0.getPOV()==.45) {
     			driveTrain.tankDrive(0, 0);
     		}
     		if(gamePad0.getPOV()==90) {
+				//if((initialQuaternion - ahrs.getQuaternionZ()) > 1) {
+    				
+    			//}
     			driveTrain.tankDrive(.7, -.7);
     		}
     		if(gamePad0.getPOV()==270) {
